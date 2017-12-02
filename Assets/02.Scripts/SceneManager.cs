@@ -39,7 +39,7 @@ public class SceneManager : MonoBehaviour {
     private float m_camera_zoom_time;
 
     private const float CAMERA_ZOOM_IN_TIME = 1f;
-    private const float CAMERA_ZOOM_STAY_TIME = 1f;
+    private const float CAMERA_ZOOM_STAY_TIME = 60f;
     private const float CAMERA_ZOOM_OUT_TIME = 1f;
     private float m_zoom_start_time = 0f;
 
@@ -62,6 +62,16 @@ public class SceneManager : MonoBehaviour {
     public Image[] m_remain_arrow_images;
 
     public GameObject m_retry_dialog_window;
+
+    private const int SCORE_SPRITE_MISSED = 11;
+    private const int SCORE_SPRITE_BULLS_EYE = 12;
+    public Sprite[] m_score_sprites;
+    public RectTransform m_score_image_tr;
+    private Image m_score_image;
+    private float m_show_score_image_start_time;
+    private const float SHOW_SCORE_IMAGE_TIME = 1.0f;
+    private const float SHOW_SCORE_FADE_IN_FACTOR = 0.3f;
+    private const float SHOW_SCORE_FADE_OUT_FACTOR = 0.3f;
 
     public GameState GS
     {
@@ -86,6 +96,9 @@ public class SceneManager : MonoBehaviour {
 
         m_camera = Camera.main;
         m_camera_tr = m_camera.GetComponent<Transform>();
+
+        m_score_image = m_score_image_tr.gameObject.GetComponent<Image>();
+        m_score_image_tr.gameObject.SetActive(false);
 
         m_camera_target_pos = m_camera_normal_pos;
         m_camera_target_rot = m_camera_normal_rot;
@@ -128,9 +141,15 @@ public class SceneManager : MonoBehaviour {
                 break;
 
             case GameState.ZOOM_IN:
-            case GameState.ZOOM_STAY:
             case GameState.ZOOM_OUT:
                 ZoomCamera();
+                break;
+
+            case GameState.ZOOM_STAY:
+                if(Input.GetMouseButtonUp(0))
+                {
+                    ZoomOut();
+                }
                 break;
 
             case GameState.END:
@@ -154,11 +173,7 @@ public class SceneManager : MonoBehaviour {
             m_launcher.Prepare();
 
             m_wind = Random.Range(-1f, 1f);
-            // m_wind_thumb_tr.localPosition = new Vector3(m_wind * 100f, m_wind_thumb_tr.localPosition.y, m_wind_thumb_tr.localPosition.z);
-            // Debug.Log(m_wind_thumb_tr.localPosition);
-            // m_wind_thumb_tr.SetInsetAndSizeFromParentEdge(RectTransform.Edge.Left, 100f, m_wind_thumb_tr.rect.width);
             m_wind_thumb_tr.anchoredPosition = new Vector3(m_wind * 100f, m_wind_thumb_tr.anchoredPosition.y);
-            // Debug.Log(m_wind_thumb_tr.anchoredPosition);
         }
         else
         {
@@ -196,13 +211,20 @@ public class SceneManager : MonoBehaviour {
         m_camera_target_size = m_camera_zoom_size;
         m_camera_zoom_time = CAMERA_ZOOM_IN_TIME;
 
-        m_score += CalculateScore();
+        int score = CalculateScore();
+        m_score += score;
         m_score_text.text = m_score.ToString();
+
+        StartShowingScoreImage(score);
     }
 
     public void Missed()
     {
         GS = GameState.IDLE;
+
+        m_score_image.sprite = m_score_sprites[SCORE_SPRITE_MISSED];
+
+        StartShowingScoreImage(-1);
     }
 
     void ZoomCamera()
@@ -232,14 +254,7 @@ public class SceneManager : MonoBehaviour {
                     break;
 
                 case GameState.ZOOM_STAY:
-                    GS = GameState.ZOOM_OUT;
-
-                    m_zoom_start_time = Time.time;
-                    m_camera_target_pos = m_camera_normal_pos;
-                    m_camera_target_rot = m_camera_normal_rot;
-                    m_camera_target_size = m_camera_normal_size;
-                    m_camera_zoom_time = CAMERA_ZOOM_OUT_TIME;
-
+                    ZoomOut();
                     break;
 
                 case GameState.ZOOM_OUT:
@@ -249,9 +264,73 @@ public class SceneManager : MonoBehaviour {
         }
     }
 
+    void ZoomOut()
+    {
+        GS = GameState.ZOOM_OUT;
+
+        m_zoom_start_time = Time.time;
+        m_camera_target_pos = m_camera_normal_pos;
+        m_camera_target_rot = m_camera_normal_rot;
+        m_camera_target_size = m_camera_normal_size;
+        m_camera_zoom_time = CAMERA_ZOOM_OUT_TIME;
+    }
+
     public float GetWind()
     {
         return m_wind;
+    }
+
+    void StartShowingScoreImage(int score)
+    {
+        if (m_is_bulls_eye)
+        {
+            m_score_image.sprite = m_score_sprites[SCORE_SPRITE_BULLS_EYE];
+        }
+        else if(score < 0)
+        {
+            m_score_image.sprite = m_score_sprites[SCORE_SPRITE_MISSED];
+        }
+        else
+        {
+            m_score_image.sprite = m_score_sprites[score];
+        }
+        // m_score_image.sprite = m_score_sprites[SCORE_SPRITE_BULLS_EYE];
+
+        m_score_image_tr.sizeDelta = m_score_image.sprite.rect.size;
+        m_score_image.color = new Color(1f, 1f, 1f, 0.0f);
+
+        m_show_score_image_start_time = Time.time;
+
+        m_score_image.gameObject.SetActive(true);
+
+        StartCoroutine(ShowScoreSprite());
+    }
+
+    IEnumerator ShowScoreSprite()
+    {
+        while(Time.time < m_show_score_image_start_time + SHOW_SCORE_IMAGE_TIME)
+        {
+            yield return new WaitForEndOfFrame();
+
+            float t = (Time.time - m_show_score_image_start_time) / SHOW_SCORE_IMAGE_TIME;
+
+            if(t < SHOW_SCORE_FADE_IN_FACTOR)
+            {
+                float alpha = t / SHOW_SCORE_FADE_IN_FACTOR;
+                m_score_image.color = new Color(1f, 1f, 1f, alpha);
+            }
+            else if(t < 1.0f - SHOW_SCORE_FADE_OUT_FACTOR)
+            {
+
+            }
+            else
+            {
+                float alpha = 1f - (t - (1 - SHOW_SCORE_FADE_OUT_FACTOR)) / SHOW_SCORE_FADE_OUT_FACTOR;
+                m_score_image.color = new Color(1f, 1f, 1f, alpha);
+            }
+        }
+
+        m_score_image.gameObject.SetActive(false);
     }
 
     int CalculateScore()
